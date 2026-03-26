@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>诗意贪吃蛇 - 点击即玩</title>
+    <meta property="og:title" content="诗意贪吃蛇" />
+    <meta property="og:description" content="游弋墨色之间，收集散落词语，集齐八字成诗。" />
+    
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;600;700&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-deep: #0a0a0f;
+            --fg-paper: #f5f0e6;
+            --fg-muted: #8a8a9a;
+            --accent-vermilion: #c94043;
+            --accent-gold: #d4a857;
+            --accent-jade: #5a9a7a;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            font-family: 'Noto Serif SC', serif;
+            background: var(--bg-deep);
+            color: var(--fg-paper);
+            height: 100vh;
+            height: -webkit-fill-available;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+        }
+        
+        .title-font { font-family: 'ZCOOL XiaoWei', serif; }
+        
+        .ink-texture {
+            position: fixed;
+            inset: 0;
+            background: 
+                radial-gradient(ellipse at 20% 30%, rgba(30, 30, 45, 0.8) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 70%, rgba(25, 25, 35, 0.6) 0%, transparent 40%),
+                var(--bg-deep);
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            height: -webkit-fill-available;
+            position: relative;
+            z-index: 10;
+        }
+
+        @media (min-width: 768px) {
+            .app-container { flex-direction: row; }
+            .game-area { flex: 1; }
+            .sidebar { width: 320px; border-left: 1px solid rgba(201, 64, 67, 0.2); }
+        }
+
+        .game-canvas-wrapper {
+            position: relative;
+            flex: 1;
+            border: 1px solid rgba(201, 64, 67, 0.3);
+            background: rgba(10, 10, 15, 0.9);
+            overflow: hidden;
+        }
+        
+        .game-canvas-wrapper::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        .control-btn {
+            transition: all 0.2s ease;
+            background: rgba(201, 64, 67, 0.15);
+            border: 1px solid rgba(201, 64, 67, 0.4);
+            color: var(--fg-paper);
+            padding: 8px 16px;
+            border-radius: 4px;
+        }
+        
+        .control-btn:active { background: rgba(201, 64, 67, 0.4); }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(10, 10, 15, 0.95);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .overlay.hidden { display: none; }
+        
+        .progress-ring { position: relative; width: 60px; height: 60px; }
+        .progress-ring svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+        .progress-ring circle { fill: none; stroke-width: 4; }
+        .progress-ring .bg { stroke: rgba(245, 240, 230, 0.1); }
+        .progress-ring .progress { stroke: var(--accent-vermilion); stroke-linecap: round; }
+        .progress-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: 600; }
+
+        .hint-text {
+            position: absolute;
+            bottom: 10px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 0.9rem;
+            color: var(--accent-jade);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+        
+        .hint-text.visible { opacity: 1; }
+
+        .sidebar {
+            background: linear-gradient(135deg, rgba(245, 240, 230, 0.03) 0%, rgba(245, 240, 230, 0.01) 100%);
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid rgba(201, 64, 67, 0.2);
+        }
+        
+        .collected-box {
+            padding: 10px;
+            border-bottom: 1px solid rgba(201, 64, 67, 0.1);
+        }
+
+        /* 修复：添加缺失的动画定义 */
+        @keyframes fadeInPoetry {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="ink-texture"></div>
+    
+    <div class="app-container">
+        <div class="game-area flex flex-col">
+            <header class="p-2 flex items-center justify-between border-b border-opacity-10 border-white">
+                <h1 class="title-font text-lg tracking-wider">诗意贪吃蛇</h1>
+                <div class="flex items-center gap-4">
+                    <div class="text-xs" style="color: var(--fg-muted);">
+                        得分: <span id="score" class="font-semibold" style="color: var(--accent-gold);">0</span>
+                    </div>
+                    <div class="progress-ring">
+                        <svg width="60" height="60">
+                            <circle class="bg" cx="30" cy="30" r="26"></circle>
+                            <circle class="progress" id="progressCircle" cx="30" cy="30" r="26" stroke-dasharray="163.36" stroke-dashoffset="163.36"></circle>
+                        </svg>
+                        <div class="progress-text"><span id="wordCount">0</span>/8</div>
+                    </div>
+                </div>
+            </header>
+            
+            <div class="game-canvas-wrapper flex-1">
+                <canvas id="gameCanvas"></canvas>
+                <canvas id="effectCanvas" class="absolute inset-0 pointer-events-none"></canvas>
+                <div id="hintText" class="hint-text">佳偶天成，寻得高亮词</div>
+                
+                <div id="gameOverlay" class="overlay">
+                    <h2 class="title-font text-2xl mb-2">诗意贪吃蛇</h2>
+                    <p class="text-sm mb-4 opacity-60 px-4">游弋墨色之间，集齐八字成诗</p>
+                    <div class="text-xs mb-6 opacity-50">
+                        <p>• 画布上始终存在词语</p>
+                        <p>• 高亮词语为推荐搭配</p>
+                        <p>• 方向键/滑动控制方向</p>
+                    </div>
+                    <button id="startBtn" class="control-btn text-base px-8 py-2">开始游戏</button>
+                </div>
+                
+                <div id="poemCompleteOverlay" class="overlay hidden">
+                    <h3 class="title-font text-lg mb-1" style="color: var(--accent-gold);">诗作已成</h3>
+                    <p class="text-xs mb-4 opacity-50">五言绝句</p>
+                    <div id="generatedPoem" class="space-y-2 mb-6 text-lg"></div>
+                    <div class="text-sm mb-4 opacity-50">
+                        得分: <span id="poemScore" style="color: var(--accent-gold);">0</span>
+                    </div>
+                    <div class="flex gap-4">
+                        <button id="continueBtn" class="control-btn px-4 py-2 text-sm">继续游玩</button>
+                        <button id="endBtn" class="control-btn px-4 py-2 text-sm" style="color: var(--accent-vermilion); border-color: var(--accent-vermilion);">结束游玩</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <aside class="sidebar flex-1 md:flex-none overflow-hidden flex flex-col">
+            <div class="collected-box">
+                <h3 class="text-xs mb-2 opacity-50">当前收集 (<span id="currentCollectCount">0</span>/8)</h3>
+                <div id="collectedWords" class="flex flex-wrap gap-1 min-h-[32px]"></div>
+            </div>
+            <div class="p-2 flex-1 overflow-y-auto">
+                 <div id="poetryContent" class="space-y-2"></div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        // 词库系统
+        const WORD_LIBRARY = [
+            { word: '明月', mood: 'cold', effect: 'moon', color: '#e8e8f0', rhyme: 'eng' },
+            { word: '残雪', mood: 'cold', effect: 'snow', color: '#f0f8ff', rhyme: 'e' },
+            { word: '寒霜', mood: 'cold', effect: 'frost', color: '#d0e8f0', rhyme: 'ang' },
+            { word: '孤月', mood: 'cold', effect: 'moon', color: '#d8dce8', rhyme: 'e' },
+            { word: '冰心', mood: 'cold', effect: 'ice', color: '#c8e8f8', rhyme: 'in' },
+            { word: '霜华', mood: 'cold', effect: 'frost', color: '#d8e0e8', rhyme: 'a' },
+            { word: '春风', mood: 'warm', effect: 'breeze', color: '#f8e8d8', rhyme: 'eng' },
+            { word: '落花', mood: 'warm', effect: 'petal', color: '#f8d0d8', rhyme: 'a' },
+            { word: '晚霞', mood: 'warm', effect: 'glow', color: '#f8c0a0', rhyme: 'a' },
+            { word: '暖阳', mood: 'warm', effect: 'sun', color: '#f8e0a0', rhyme: 'ang' },
+            { word: '桃花', mood: 'warm', effect: 'petal', color: '#f8b0c0', rhyme: 'a' },
+            { word: '红尘', mood: 'warm', effect: 'glow', color: '#e8c0a8', rhyme: 'en' },
+            { word: '细雨', mood: 'water', effect: 'rain', color: '#a0c8d8', rhyme: 'u' },
+            { word: '孤舟', mood: 'water', effect: 'boat', color: '#8898a8', rhyme: 'ou' },
+            { word: '江水', mood: 'water', effect: 'wave', color: '#88b0c8', rhyme: 'ui' },
+            { word: '烟波', mood: 'water', effect: 'mist', color: '#98a8b8', rhyme: 'o' },
+            { word: '秋水', mood: 'water', effect: 'wave', color: '#90b0c0', rhyme: 'ui' },
+            { word: '寒江', mood: 'water', effect: 'wave', color: '#88a0b8', rhyme: 'ang' },
+            { word: '故人', mood: 'emotion', effect: 'memory', color: '#c8b898', rhyme: 'en' },
+            { word: '断肠', mood: 'emotion', effect: 'sorrow', color: '#b89898', rhyme: 'ang' },
+            { word: '长亭', mood: 'emotion', effect: 'farewell', color: '#a8a898', rhyme: 'ing' },
+            { word: '相思', mood: 'emotion', effect: 'heart', color: '#c89898', rhyme: 'i' },
+            { word: '归梦', mood: 'emotion', effect: 'dream', color: '#a8b0c8', rhyme: 'eng' },
+            { word: '离愁', mood: 'emotion', effect: 'sorrow', color: '#b8a0a0', rhyme: 'ou' },
+            { word: '青山', mood: 'mountain', effect: 'mountain', color: '#88a888', rhyme: 'an' },
+            { word: '孤峰', mood: 'mountain', effect: 'peak', color: '#789888', rhyme: 'eng' },
+            { word: '云雾', mood: 'mountain', effect: 'cloud', color: '#a8a8b0', rhyme: 'u' },
+            { word: '幽径', mood: 'mountain', effect: 'path', color: '#98a088', rhyme: 'ing' },
+            { word: '松涛', mood: 'mountain', effect: 'wind', color: '#88a078', rhyme: 'ao' },
+            { word: '远山', mood: 'mountain', effect: 'mountain', color: '#90a890', rhyme: 'an' },
+            { word: '黄昏', mood: 'time', effect: 'dusk', color: '#c8a088', rhyme: 'un' },
+            { word: '深夜', mood: 'time', effect: 'night', color: '#686888', rhyme: 'e' },
+            { word: '晨曦', mood: 'time', effect: 'dawn', color: '#e8d0a0', rhyme: 'i' },
+            { word: '暮色', mood: 'time', effect: 'dusk', color: '#b89888', rhyme: 'e' },
+            { word: '流年', mood: 'time', effect: 'time', color: '#c8b090', rhyme: 'an' }
+        ];
+
+        const CONFIG = { gridSize: 20, initialSpeed: 140, minSpeed: 80, speedIncrement: 2, minFoods: 3, maxFoods: 5, wordsPerPoem: 8 };
+        const CONNECTORS = {
+            cold: ['照', '映', '伴', '对', '含', '凝', '覆', '透', '洗', '带'],
+            warm: ['暖', '染', '醉', '拥', '拂', '开', '惹', '润', '抚', '催'],
+            water: ['渡', '泛', '随', '入', '映', '流', '载', '浮', '隔', '送'],
+            emotion: ['忆', '念', '寄', '梦', '叹', '惜', '诉', '问', '惹', '寄'],
+            mountain: ['绕', '倚', '隔', '隐', '入', '连', '望', '伴', '锁', '依'],
+            time: ['度', '换', '送', '催', '伴', '叹', '惜', '留', '感', '谢'],
+            neutral: ['对', '向', '与', '之', '见', '在', '下', '上', '外', '里']
+        };
+
+        const GameState = {
+            snake: [], direction: { x: 1, y: 0 }, nextDirection: { x: 1, y: 0 },
+            foods: [], score: 0, totalWordCount: 0, currentWordCount: 0,
+            collectedWords: [], poems: [], isRunning: false, isPaused: false,
+            speed: CONFIG.initialSpeed, lastUpdate: 0, interpolation: 0,
+            prevSnake: [], cols: 0, rows: 0, recommendedFood: null
+        };
+        
+        const VisualState = { particles: [], backgroundEffects: [], currentMood: 'neutral', moodIntensity: 0, snakeGlow: null };
+        
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const effectCanvas = document.getElementById('effectCanvas');
+        const effectCtx = effectCanvas.getContext('2d');
+        const hintText = document.getElementById('hintText');
+        
+        const scoreEl = document.getElementById('score');
+        const wordCountEl = document.getElementById('wordCount');
+        const currentCollectCountEl = document.getElementById('currentCollectCount');
+        const poetryContent = document.getElementById('poetryContent');
+        const collectedWordsEl = document.getElementById('collectedWords');
+        const gameOverlay = document.getElementById('gameOverlay');
+        const poemCompleteOverlay = document.getElementById('poemCompleteOverlay');
+        const startBtn = document.getElementById('startBtn');
+        const continueBtn = document.getElementById('continueBtn');
+        const endBtn = document.getElementById('endBtn');
+        const progressCircle = document.getElementById('progressCircle');
+        const generatedPoem = document.getElementById('generatedPoem');
+        const poemScore = document.getElementById('poemScore');
+        
+        function resizeCanvas() {
+            const wrapper = canvas.parentElement;
+            const rect = wrapper.getBoundingClientRect();
+            canvas.width = Math.floor(rect.width);
+            canvas.height = Math.floor(rect.height);
+            effectCanvas.width = canvas.width;
+            effectCanvas.height = canvas.height;
+            GameState.cols = Math.floor(canvas.width / CONFIG.gridSize);
+            GameState.rows = Math.floor(canvas.height / CONFIG.gridSize);
+        }
+        
+        function initGame() {
+            resizeCanvas(); 
+            const startX = Math.floor(GameState.cols / 4);
+            const startY = Math.floor(GameState.rows / 2);
+            GameState.snake = [
+                { x: startX, y: startY }, { x: startX - 1, y: startY }, { x: startX - 2, y: startY }
+            ];
+            GameState.prevSnake = GameState.snake.map(s => ({ ...s }));
+            GameState.direction = { x: 1, y: 0 };
+            GameState.nextDirection = { x: 1, y: 0 };
+            GameState.foods = [];
+            GameState.score = 0;
+            GameState.totalWordCount = 0;
+            GameState.currentWordCount = 0;
+            GameState.collectedWords = [];
+            GameState.recommendedFood = null;
+            GameState.speed = CONFIG.initialSpeed;
+            GameState.isRunning = true;
+            GameState.isPaused = false;
+            GameState.interpolation = 0;
+            
+            VisualState.particles = [];
+            VisualState.backgroundEffects = [];
+            VisualState.currentMood = 'neutral';
+            VisualState.moodIntensity = 0;
+            VisualState.snakeGlow = null;
+            
+            updateUI();
+            gameOverlay.classList.add('hidden');
+            poemCompleteOverlay.classList.add('hidden');
+            hintText.classList.add('visible');
+            
+            initFoods();
+        }
+        
+        function updateUI() {
+            scoreEl.textContent = GameState.score;
+            wordCountEl.textContent = GameState.currentWordCount;
+            currentCollectCountEl.textContent = GameState.currentWordCount;
+            collectedWordsEl.innerHTML = GameState.collectedWords.map((item, i) => {
+                return `<span class="px-1 py-0.5 rounded text-xs" style="background: rgba(201, 64, 67, 0.15); color: ${item.color}; border: 1px solid rgba(201, 64, 67, 0.2);">${item.word}</span>`;
+            }).join('');
+            
+            const progress = GameState.currentWordCount / CONFIG.wordsPerPoem;
+            const circumference = 2 * Math.PI * 26; // r=26
+            progressCircle.style.strokeDashoffset = circumference * (1 - Math.min(progress, 1));
+        }
+        
+        function initFoods() {
+            const count = CONFIG.minFoods + Math.floor(Math.random() * (CONFIG.maxFoods - CONFIG.minFoods + 1));
+            for (let i = 0; i < count; i++) spawnFood();
+        }
+        
+        function spawnFood() {
+            let position, attempts = 0;
+            do {
+                position = {
+                    x: Math.floor(Math.random() * (GameState.cols - 4)) + 2,
+                    y: Math.floor(Math.random() * (GameState.rows - 4)) + 2
+                };
+                attempts++;
+            } while (attempts < 100 && (GameState.snake.some(seg => seg.x === position.x && seg.y === position.y) || GameState.foods.some(f => Math.abs(f.x - position.x) < 3 && Math.abs(f.y - position.y) < 3)));
+            
+            const usedWords = GameState.foods.map(f => f.word);
+            const collectedWords = GameState.collectedWords.map(w => w.word);
+            const allUsed = [...usedWords, ...collectedWords];
+            
+            const availableWords = WORD_LIBRARY.filter(w => !allUsed.includes(w.word));
+            const wordPool = availableWords.length > 0 ? availableWords : WORD_LIBRARY;
+            const wordData = wordPool[Math.floor(Math.random() * wordPool.length)];
+            
+            GameState.foods.push({ ...position, ...wordData, appearTime: Date.now(), pulsePhase: Math.random() * Math.PI * 2 });
+        }
+        
+        function updateRecommendation() {
+            if (GameState.currentWordCount % 2 === 1 && GameState.currentWordCount < 8) {
+                const lastWord = GameState.collectedWords[GameState.currentWordCount - 1];
+                const candidates = GameState.foods;
+                
+                if (candidates.length > 0) {
+                    let bestMatch = null;
+                    let highestScore = -1;
+                    
+                    candidates.forEach(food => {
+                        let score = 0;
+                        if (food.mood === lastWord.mood) score += 10;
+                        
+                        const sentenceIndex = Math.floor(GameState.currentWordCount / 2);
+                        if (sentenceIndex === 3) {
+                            const rhymeRef = GameState.collectedWords[3];
+                            if (rhymeRef && food.rhyme === rhymeRef.rhyme) score += 20;
+                        }
+                        
+                        if (score > highestScore) {
+                            highestScore = score;
+                            bestMatch = food;
+                        }
+                    });
+                    
+                    GameState.recommendedFood = bestMatch;
+                    hintText.classList.add('visible');
+                }
+            } else {
+                GameState.recommendedFood = null;
+                hintText.classList.remove('visible');
+            }
+        }
+        
+        function gameLoop(timestamp) {
+            if (!GameState.isRunning) return;
+            const deltaTime = timestamp - GameState.lastUpdate;
+            
+            if (!GameState.isPaused && deltaTime >= GameState.speed) {
+                GameState.lastUpdate = timestamp;
+                GameState.interpolation = 0;
+                GameState.prevSnake = GameState.snake.map(s => ({ ...s }));
+                updateGame();
+            } else {
+                GameState.interpolation = Math.min(deltaTime / GameState.speed, 1);
+            }
+            
+            render();
+            renderEffects();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function updateGame() {
+            GameState.direction = { ...GameState.nextDirection };
+            const head = GameState.snake[0];
+            const newHead = {
+                x: (head.x + GameState.direction.x + GameState.cols) % GameState.cols,
+                y: (head.y + GameState.direction.y + GameState.rows) % GameState.rows
+            };
+            
+            if (GameState.snake.some(seg => seg.x === newHead.x && seg.y === newHead.y)) {
+                gameOver();
+                return;
+            }
+            
+            GameState.snake.unshift(newHead);
+            const eatenFoodIndex = GameState.foods.findIndex(f => f.x === newHead.x && f.y === newHead.y);
+            
+            if (eatenFoodIndex !== -1) {
+                const eatenFood = GameState.foods[eatenFoodIndex];
+                GameState.foods.splice(eatenFoodIndex, 1);
+                collectWord(eatenFood);
+            } else {
+                GameState.snake.pop();
+            }
+        }
+        
+        function collectWord(food) {
+            GameState.score += 10;
+            GameState.totalWordCount++;
+            GameState.currentWordCount++;
+            
+            GameState.collectedWords.push(food);
+            createCollectEffect(food);
+            updateMood(food.mood);
+            
+            VisualState.snakeGlow = { color: food.color, intensity: 1, decay: 0.02 };
+            updateUI();
+            updateProgressRing(GameState.currentWordCount / CONFIG.wordsPerPoem);
+            
+            if (GameState.speed > CONFIG.minSpeed) GameState.speed -= CONFIG.speedIncrement;
+            
+            updateRecommendation();
+            
+            if (GameState.currentWordCount >= CONFIG.wordsPerPoem) {
+                setTimeout(() => completePoem(), 500);
+                return;
+            }
+            
+            spawnFood();
+            updateRecommendation();
+        }
+        
+        function updateProgressRing(progress) {
+            const circumference = 2 * Math.PI * 26;
+            progressCircle.style.strokeDashoffset = circumference * (1 - Math.min(progress, 1));
+        }
+        
+        function completePoem() {
+            GameState.isPaused = true;
+            const poem = generatePoem(GameState.collectedWords);
+            GameState.poems.push(poem);
+            poemScore.textContent = GameState.score;
+            renderGeneratedPoem(poem);
+            poemCompleteOverlay.classList.remove('hidden');
+            hintText.classList.remove('visible');
+        }
+        
+        function generatePoem(collectedWords) {
+            const words = [...collectedWords];
+            const moods = words.map(w => w.mood);
+            const moodCounts = {};
+            moods.forEach(m => moodCounts[m] = (moodCounts[m] || 0) + 1);
+            const dominantMood = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'neutral';
+            
+            const connPool = [...(CONNECTORS[dominantMood] || CONNECTORS.neutral)];
+            for (let i = connPool.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [connPool[i], connPool[j]] = [connPool[j], connPool[i]];
+            }
+            const selectedConnectors = connPool.slice(0, 4);
+            while(selectedConnectors.length < 4) selectedConnectors.push(CONNECTORS.neutral[selectedConnectors.length]);
+
+            const lines = [];
+            for (let i = 0; i < 4; i++) {
+                const w1 = words[i * 2].word;
+                const w2 = words[i * 2 + 1].word;
+                const conn = selectedConnectors[i];
+                const line = `${w1}${conn}${w2}${i < 3 ? '，' : '。'}`;
+                lines.push(line);
+            }
+            
+            return { lines, words: words.map(w => w.word), connectors: selectedConnectors, mood: dominantMood };
+        }
+        
+        function renderGeneratedPoem(poem) {
+            // 修复：确保使用正确的动画名称和初始透明度
+            generatedPoem.innerHTML = poem.lines.map((line, i) => 
+                `<p style="animation: fadeInPoetry 0.6s ease ${i * 0.15}s forwards; opacity: 0; letter-spacing: 0.1em;">
+                    ${line}
+                </p>`
+            ).join('');
+        }
+        
+        function continueGame() {
+            GameState.currentWordCount = 0;
+            GameState.collectedWords = [];
+            currentCollectCountEl.textContent = '0';
+            collectedWordsEl.innerHTML = '';
+            updateProgressRing(0);
+            addPoemToCollection(GameState.poems[GameState.poems.length - 1]);
+            poemCompleteOverlay.classList.add('hidden');
+            GameState.isPaused = false;
+            while (GameState.foods.length < CONFIG.minFoods) spawnFood();
+            updateRecommendation();
+        }
+        
+        function addPoemToCollection(poem) {
+            const poemEl = document.createElement('div');
+            poemEl.className = 'p-2 rounded text-xs';
+            poemEl.style.cssText = 'background: rgba(245, 240, 230, 0.02); border: 1px solid rgba(201, 64, 67, 0.1);';
+            poemEl.innerHTML = `<div class="space-y-1">${poem.lines.map(line => `<p style="letter-spacing: 0.02em;">${line}</p>`).join('')}</div>`;
+            poetryContent.insertBefore(poemEl, poetryContent.firstChild);
+        }
+        
+        function gameOver() {
+            GameState.isRunning = false;
+            if (GameState.collectedWords.length > 0) {
+                const poem = { lines: [GameState.collectedWords.map(w=>w.word).join(' · ')], words: GameState.collectedWords.map(w=>w.word), mood: 'neutral' };
+                GameState.poems.push(poem);
+                addPoemToCollection(poem);
+            }
+            
+            gameOverlay.innerHTML = `
+                <h2 class="title-font text-xl mb-2">游戏结束</h2>
+                <p class="text-sm mb-1" style="color: var(--accent-gold);">总得分: ${GameState.score}</p>
+                <p class="text-xs mb-4 opacity-50">创作诗歌: ${GameState.poems.length} 首</p>
+                <button id="restartBtn" class="control-btn px-6 py-2 text-sm">再来一局</button>
+            `;
+            gameOverlay.classList.remove('hidden');
+            poemCompleteOverlay.classList.add('hidden');
+            document.getElementById('restartBtn').addEventListener('click', () => { initGame(); requestAnimationFrame(gameLoop); });
+        }
+        
+        function updateMood(mood) {
+            VisualState.currentMood = mood;
+            VisualState.moodIntensity = 1;
+            addBackgroundEffect(mood);
+        }
+        
+        function addBackgroundEffect(mood) {
+            const types = { cold: ['snow'], warm: ['petal'], water: ['rain'], emotion: ['particle'], mountain: ['cloud'], time: ['star'] };
+            const type = (types[mood] || ['particle'])[0];
+            for (let i = 0; i < 8; i++) VisualState.backgroundEffects.push(createBackgroundParticle(type));
+        }
+        
+        function createBackgroundParticle(type) {
+            const p = { x: Math.random() * canvas.width, y: type === 'rain' ? -10 : Math.random() * canvas.height, vx: (Math.random() - 0.5) * 2, vy: type === 'rain' ? 3 + Math.random() * 2 : (Math.random() - 0.5) * 0.5, size: Math.max(1, 2 + Math.random() * 3), alpha: 0.3 + Math.random() * 0.4, life: 1, decay: 0.002 + Math.random() * 0.003, type: type };
+            if (type === 'snow') { p.vy = 0.5 + Math.random() * 0.5; p.vx = (Math.random() - 0.5) * 0.5; }
+            else if (type === 'rain') { p.vy = 5 + Math.random() * 3; p.vx = -0.5; p.size = 1; }
+            return p;
+        }
+        
+        function createCollectEffect(food) {
+            const centerX = (food.x + 0.5) * CONFIG.gridSize; const centerY = (food.y + 0.5) * CONFIG.gridSize;
+            for (let i = 0; i < 15; i++) { const angle = (Math.PI * 2 / 15) * i + Math.random() * 0.5; const speed = 2 + Math.random() * 3; VisualState.particles.push({ x: centerX, y: centerY, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, size: 2 + Math.random() * 3, alpha: 1, color: food.color, life: 1, decay: 0.02 + Math.random() * 0.02, type: 'burst' }); }
+            VisualState.particles.push({ x: centerX, y: centerY, radius: 5, maxRadius: 40, alpha: 0.8, color: food.color, life: 1, decay: 0.03, type: 'ripple' });
+        }
+        
+        function render() { ctx.clearRect(0, 0, canvas.width, canvas.height); renderBackground(); renderGrid(); renderFoods(); renderSnake(); }
+        
+        function renderBackground() {
+            const moodColors = { cold: ['rgba(30, 40, 60, 0.08)', 'rgba(20, 30, 50, 0.08)'], warm: ['rgba(60, 40, 30, 0.08)', 'rgba(50, 30, 20, 0.08)'], water: ['rgba(30, 50, 60, 0.08)', 'rgba(20, 40, 50, 0.08)'], emotion: ['rgba(50, 40, 40, 0.08)', 'rgba(40, 30, 30, 0.08)'], mountain: ['rgba(30, 50, 40, 0.08)', 'rgba(20, 40, 30, 0.08)'], time: ['rgba(50, 45, 35, 0.08)', 'rgba(40, 35, 25, 0.08)'], neutral: ['rgba(20, 20, 25, 0.05)', 'rgba(15, 15, 20, 0.05)'] };
+            const colors = moodColors[VisualState.currentMood] || moodColors.neutral;
+            if (VisualState.moodIntensity > 0) { const gradient = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, 0, canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) / 2); gradient.addColorStop(0, colors[0]); gradient.addColorStop(1, colors[1]); ctx.fillStyle = gradient; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+        }
+        
+        function renderGrid() { ctx.strokeStyle = 'rgba(245, 240, 230, 0.02)'; ctx.lineWidth = 1; for (let x = 0; x <= canvas.width; x += CONFIG.gridSize) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); } for (let y = 0; y <= canvas.height; y += CONFIG.gridSize) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); } }
+        
+        function renderFoods() {
+            GameState.foods.forEach(food => {
+                const x = (food.x + 0.5) * CONFIG.gridSize; const y = (food.y + 0.5) * CONFIG.gridSize;
+                const pulse = Math.sin(Date.now() * 0.004 + food.pulsePhase) * 0.15 + 0.85;
+                const radius = Math.max(1, CONFIG.gridSize * 0.6 * pulse);
+                const isRecommended = GameState.recommendedFood && GameState.recommendedFood.word === food.word;
+                
+                if (isRecommended) {
+                    const glowTime = Date.now() * 0.003; const glowSize = radius * 2.5 + Math.sin(glowTime) * 5;
+                    ctx.beginPath(); ctx.arc(x, y, Math.max(1, glowSize), 0, Math.PI * 2);
+                    const gradient = ctx.createRadialGradient(x, y, 0, x, y, Math.max(1, glowSize));
+                    gradient.addColorStop(0, 'rgba(212, 168, 87, 0.4)'); gradient.addColorStop(1, 'rgba(212, 168, 87, 0)');
+                    ctx.fillStyle = gradient; ctx.fill();
+                }
+                
+                const glowGradient = ctx.createRadialGradient(x, y, 0, x, y, Math.max(1, radius * 2));
+                glowGradient.addColorStop(0, food.color + '40'); glowGradient.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = glowGradient; ctx.beginPath(); ctx.arc(x, y, Math.max(1, radius * 2), 0, Math.PI * 2); ctx.fill();
+                
+                ctx.font = '14px "Noto Serif SC", serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillStyle = isRecommended ? '#d4a857' : food.color;
+                ctx.fillText(food.word, x, y);
+            });
+        }
+        
+        function renderSnake() {
+            if (GameState.snake.length === 0) return; const snake = GameState.snake; const prevSnake = GameState.prevSnake; const interp = GameState.interpolation;
+            if (VisualState.snakeGlow && VisualState.snakeGlow.intensity > 0) { ctx.shadowColor = VisualState.snakeGlow.color; ctx.shadowBlur = Math.max(0, 20 * VisualState.snakeGlow.intensity); VisualState.snakeGlow.intensity -= VisualState.snakeGlow.decay; }
+            for (let i = snake.length - 1; i >= 0; i--) {
+                const current = snake[i]; const prev = prevSnake[i] || current;
+                const x = (prev.x + (current.x - prev.x) * interp + 0.5) * CONFIG.gridSize;
+                const y = (prev.y + (current.y - prev.y) * interp + 0.5) * CONFIG.gridSize;
+                const sizeRatio = 1 - (i / snake.length) * 0.4;
+                const radius = Math.max(1, CONFIG.gridSize * 0.45 * sizeRatio);
+                const alpha = 0.9 - (i / snake.length) * 0.3;
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, Math.max(1, radius));
+                if (i === 0) { gradient.addColorStop(0, 'rgba(245, 240, 230, 1)'); gradient.addColorStop(1, 'rgba(180, 175, 165, 0.7)'); }
+                else { gradient.addColorStop(0, `rgba(200, 195, 185, ${alpha})`); gradient.addColorStop(1, `rgba(150, 145, 135, ${alpha * 0.6})`); }
+                ctx.fillStyle = gradient; ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
+                if (i === 0) { const eyeOffset = 4; const eyeSize = 2; const dir = GameState.direction; ctx.fillStyle = '#1a1a1f'; ctx.beginPath(); ctx.arc(x + dir.y * eyeOffset - dir.x * 2, y - dir.x * eyeOffset - dir.y * 2, eyeSize, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(x - dir.y * eyeOffset - dir.x * 2, y + dir.x * eyeOffset - dir.y * 2, eyeSize, 0, Math.PI * 2); ctx.fill(); }
+            }
+            ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+        }
+        
+        function renderEffects() {
+            effectCtx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+            VisualState.backgroundEffects = VisualState.backgroundEffects.filter(p => { p.x += p.vx; p.y += p.vy; p.life -= p.decay; if (p.life <= 0 || p.y > effectCanvas.height + 20 || p.x < -20 || p.x > effectCanvas.width + 20) return false; const alpha = Math.max(0, Math.min(1, p.alpha * p.life)); if (p.type === 'rain') { effectCtx.strokeStyle = `rgba(160, 200, 216, ${alpha * 0.5})`; effectCtx.lineWidth = 1; effectCtx.beginPath(); effectCtx.moveTo(p.x, p.y); effectCtx.lineTo(p.x + p.vx * 2, p.y + p.vy * 2); effectCtx.stroke(); } else { effectCtx.fillStyle = `rgba(245, 240, 230, ${alpha})`; effectCtx.beginPath(); effectCtx.arc(p.x, p.y, Math.max(0.5, p.size), 0, Math.PI * 2); effectCtx.fill(); } return true; });
+            VisualState.particles = VisualState.particles.filter(p => { if (p.type === 'ripple') { p.radius += 2; p.life -= p.decay; if (p.life <= 0 || p.radius > p.maxRadius) return false; effectCtx.strokeStyle = p.color + Math.floor(p.life * 255).toString(16).padStart(2, '0'); effectCtx.lineWidth = 2; effectCtx.beginPath(); effectCtx.arc(p.x, p.y, Math.max(1, p.radius), 0, Math.PI * 2); effectCtx.stroke(); } else { p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.life -= p.decay; if (p.life <= 0) return false; const alpha = Math.max(0, Math.min(1, p.life)); effectCtx.fillStyle = p.color + Math.floor(alpha * 255).toString(16).padStart(2, '0'); effectCtx.beginPath(); effectCtx.arc(p.x, p.y, Math.max(0.5, p.size * p.life), 0, Math.PI * 2); effectCtx.fill(); } return true; });
+            if (VisualState.moodIntensity > 0) VisualState.moodIntensity -= 0.001;
+        }
+        
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase(); const dir = GameState.direction;
+            if ((key === 'arrowup' || key === 'w') && dir.y !== 1) GameState.nextDirection = { x: 0, y: -1 };
+            else if ((key === 'arrowdown' || key === 's') && dir.y !== -1) GameState.nextDirection = { x: 0, y: 1 };
+            else if ((key === 'arrowleft' || key === 'a') && dir.x !== 1) GameState.nextDirection = { x: -1, y: 0 };
+            else if ((key === 'arrowright' || key === 'd') && dir.x !== -1) GameState.nextDirection = { x: 1, y: 0 };
+            else if (key === ' ') { e.preventDefault(); if (GameState.isRunning && poemCompleteOverlay.classList.contains('hidden')) GameState.isPaused = !GameState.isPaused; }
+        });
+        
+        let touchStartX = 0, touchStartY = 0;
+        canvas.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; }, { passive: true });
+        canvas.addEventListener('touchend', (e) => {
+            const dx = e.changedTouches[0].clientX - touchStartX; const dy = e.changedTouches[0].clientY - touchStartY; const dir = GameState.direction;
+            if (Math.abs(dx) > Math.abs(dy)) {
+                if (dx > 30 && dir.x !== -1) GameState.nextDirection = { x: 1, y: 0 };
+                else if (dx < -30 && dir.x !== 1) GameState.nextDirection = { x: -1, y: 0 };
+            } else {
+                if (dy > 30 && dir.y !== -1) GameState.nextDirection = { x: 0, y: 1 };
+                else if (dy < -30 && dir.y !== 1) GameState.nextDirection = { x: 0, y: -1 };
+            }
+        }, { passive: true });
+        
+        window.addEventListener('resize', resizeCanvas);
+        startBtn.addEventListener('click', () => { initGame(); requestAnimationFrame(gameLoop); });
+        continueBtn.addEventListener('click', continueGame);
+        endBtn.addEventListener('click', gameOver);
+        
+        resizeCanvas();
+        render();
+    </script>
+</body>
+</html>
